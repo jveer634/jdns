@@ -1,3 +1,4 @@
+mod dns_database;
 mod dns_message;
 mod resolver;
 mod udp;

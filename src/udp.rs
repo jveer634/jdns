@@ -1,4 +1,4 @@
-use crate::resolver::handle_request;
+use crate::{dns_database::DnsDatabase, resolver::handle_request};
 use bytes::BytesMut;
 use std::sync::Arc;
 use tokio::net::UdpSocket;
@@ -16,6 +16,8 @@ impl UdpServer {
     }
 
     pub async fn run(&self) -> Result<(), Box<dyn std::error::Error>> {
+        let mut db = DnsDatabase::new();
+        db.add_dummy();
         let mut buf = [0u8; 512]; // Create a fixed-size buffer
         loop {
             let (size, src) = match self.socket.recv_from(&mut buf).await {
@@ -39,7 +41,7 @@ impl UdpServer {
                 continue;
             }
 
-            handle_request(BytesMut::from(&buf[..size]), src, &self.socket).await;
+            handle_request(BytesMut::from(&buf[..size]), src, &self.socket, &db).await;
         }
     }
 }
