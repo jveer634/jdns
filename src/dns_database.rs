@@ -24,7 +24,9 @@ impl DnsDatabase {
         println!("Search for {:?} {:?} {:#?}", domain, rtype, self.records);
         self.records
             .get(domain)
-            .and_then(|records: &Vec<DnsRecord>| records.iter().find(|record| record.record_type == rtype))
+            .and_then(|records: &Vec<DnsRecord>| {
+                records.iter().find(|record| record.record_type == rtype)
+            })
             .cloned()
     }
 
@@ -55,7 +57,7 @@ impl DnsDatabase {
 
         // Adding AAAA records
         self.add_record(
-            "example.com",
+            "example.com.",
             DnsRecord {
                 record_type: RecordType::AAAA,
                 value: "2001:db8::1".to_string(),
@@ -63,7 +65,7 @@ impl DnsDatabase {
             },
         );
         self.add_record(
-            "example.com",
+            "example.com.",
             DnsRecord {
                 record_type: RecordType::AAAA,
                 value: "2001:db8::2".to_string(),
@@ -73,7 +75,7 @@ impl DnsDatabase {
 
         // Adding CNAME records
         self.add_record(
-            "www.example.com",
+            "www.example.com.",
             DnsRecord {
                 record_type: RecordType::CNAME,
                 value: "example.com".to_string(),
@@ -81,7 +83,7 @@ impl DnsDatabase {
             },
         );
         self.add_record(
-            "blog.example.com",
+            "blog.example.com.",
             DnsRecord {
                 record_type: RecordType::CNAME,
                 value: "example.com".to_string(),
@@ -91,7 +93,7 @@ impl DnsDatabase {
 
         // Adding MX records
         self.add_record(
-            "example.com",
+            "example.com.",
             DnsRecord {
                 record_type: RecordType::MX,
                 value: "mail.example.com".to_string(),
@@ -99,7 +101,7 @@ impl DnsDatabase {
             },
         );
         self.add_record(
-            "example.com",
+            "example.com.",
             DnsRecord {
                 record_type: RecordType::MX,
                 value: "altmail.example.com".to_string(),

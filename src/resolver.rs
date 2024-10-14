@@ -1,6 +1,6 @@
 use std::{
     error::Error,
-    net::{Ipv4Addr, SocketAddr},
+    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
 };
 
 use bytes::{BufMut, BytesMut};
@@ -8,7 +8,7 @@ use tokio::net::UdpSocket;
 
 use crate::{
     dns_database::DnsDatabase,
-    dns_message::{parse_question, DnsHeader, DnsQuestion, ResultCode},
+    dns_message::{parse_question, DnsHeader, DnsQuestion, RecordType, ResultCode},
 };
 
 pub async fn handle_request(req: BytesMut, addr: SocketAddr, socket: &UdpSocket, db: &DnsDatabase) {
@@ -54,11 +54,69 @@ fn build_answer(question: DnsQuestion, db: &DnsDatabase) -> Option<BytesMut> {
 
     let record = record.unwrap();
     res.put_u16(0xc00c);
-    let hex_ip: Ipv4Addr = record.value.parse().unwrap();
-    res.put_u16(1);
-    res.put_u16(1);
-    res.put_u32(record.ttl);
-    res.put_u16(4);
-    res.put_u32(hex_ip.to_bits());
+    match record.record_type {
+        RecordType::A => {
+            let ip: Ipv4Addr = record.value.parse().unwrap();
+            res.put_u16(1);
+            res.put_u16(1);
+            res.put_u32(record.ttl);
+            res.put_u16(4);
+            res.put_u32(ip.to_bits());
+        }
+
+        RecordType::AAAA => {
+            let ip: Ipv6Addr = record.value.parse().unwrap();
+            res.put_u16(28);
+            res.put_u16(1);
+            res.put_u32(record.ttl);
+            res.put_u16(16);
+            res.put_u128(ip.into());
+        }
+
+        RecordType::MX => {
+            let encoded_domain: Vec<u8> = encode_domain_name(&record.value);
+            let default_preference: u16 = 10;
+            res.put_u16(15);
+            res.put_u16(1);
+            res.put_u32(record.ttl);
+            let rdata_len = 2 + encoded_domain.len(); // 2 bytes for preference + length of the encoded domain name
+            res.put_u16(rdata_len as u16);
+            res.put_u16(default_preference);
+            res.put_slice(&encoded_domain);
+        }
+
+        RecordType::CNAME => {
+            let encoded_domain: Vec<u8> = encode_domain_name(&record.value);
+            res.put_u16(5);
+            res.put_u16(1);
+            res.put_u32(record.ttl);
+            let rdata_len = 2 + encoded_domain.len(); // 2 bytes for preference + length of the encoded domain name
+            res.put_u16(rdata_len as u16);
+            res.put_slice(&encoded_domain);
+        }
+
+        RecordType::TXT => {
+            let encoded_domain: Vec<u8> = encode_domain_name(&record.value);
+            res.put_u16(16);
+            res.put_u16(1);
+            res.put_u32(record.ttl);
+            let rdata_len = 2 + encoded_domain.len(); // 2 bytes for preference + length of the encoded domain name
+            res.put_u16(rdata_len as u16);
+            res.put_slice(&encoded_domain);
+        }
+    }
     Some(res)
+}
+
+fn encode_domain_name(domain: &str) -> Vec<u8> {
+    let mut encoded = Vec::new();
+
+    for label in domain.split('.') {
+        let label_len = label.len();
+        encoded.push(label_len as u8); // Prefix with the length of the label
+        encoded.extend_from_slice(label.as_bytes()); // Add the label itself
+    }
+
+    encoded.push(0);
+    encoded
 }
