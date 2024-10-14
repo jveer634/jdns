@@ -48,20 +48,21 @@ pub struct DnsHeader {
     pub additional_count: u16,
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug, PartialEq)]
 #[repr(u16)]
-pub enum QueryType {
+pub enum RecordType {
     A = 1,
     CNAME = 5,
+    MX = 15,
     TXT = 16,
-    UNKNOWN(u16),
+    AAAA = 28,
 }
 
 #[derive(Debug)]
 pub struct DnsQuestion {
     pub qname: String,
-    pub qtype: QueryType,
-    pub qclass: u16,
+    pub qtype: RecordType,
+    qclass: u16,
 }
 
 impl DnsHeader {
@@ -119,14 +120,40 @@ impl DnsHeader {
         self.response = true;
         self.result_code = status;
         self.answers_count = answers_count;
+        // TODO: handle recursion
+        self.recursion_available = false;
 
         let mut response = BytesMut::with_capacity(512);
 
-        println!("Response Header: {:#?}", self);
+        let mut a: u8 = 0;
+        let mut b: u8 = 0;
+
+        a |= 1 << 7;
+        // Set bits in the 'a' byte
+        if self.recursion_desired {
+            a |= 1 << 0;
+        }
+        if self.truncated_message {
+            a |= 1 << 1;
+        }
+        if self.authoritative_answer {
+            a |= 1 << 2;
+        }
+        a |= (self.opcode & 0x0F) << 3; // 4-bit opcode into bits 3-6
+
+        // Set bits in the 'b' byte
+        if self.recursion_available {
+            b |= 1 << 7;
+        }
+        b |= (if self.z { 1 } else { 0 }) << 4; // Treat 'z' as a boolean flag
+        b |= self.result_code as u8 & 0x0F;
+
+        // Combine a and b into a 16-bit flags field
+        let flags: u16 = ((a as u16) << 8) | (b as u16);
 
         // Set up the DNS header for the response
         response.put_u16(self.id); // Transaction ID
-        response.put_u16(0b10000000); // Flags: QR = 1 (response), Opcode = 0, AA = 1
+        response.put_u16(flags);
         response.put_u16(self.questions_count); // Question Count (1)
         response.put_u16(self.answers_count); // Answer Count (1)
 
@@ -155,10 +182,12 @@ pub fn parse_question(buf: &[u8]) -> DnsQuestion {
     let query_type = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
 
     let qtype = match query_type {
-        1 => QueryType::A,
-        5 => QueryType::CNAME,
-        16 => QueryType::TXT,
-        _ => QueryType::UNKNOWN(query_type),
+        1 => RecordType::A,
+        5 => RecordType::CNAME,
+        15 => RecordType::MX,
+        16 => RecordType::TXT,
+        28 => RecordType::AAAA,
+        _ => todo!("Implement Error Handling"),
     };
 
     // for now class is hardcoded
