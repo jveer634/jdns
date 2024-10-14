@@ -1,12 +1,18 @@
-use std::{error::Error, net::SocketAddr};
+use std::{
+    error::Error,
+    net::{Ipv4Addr, SocketAddr},
+};
 
-use bytes::{Buf, BufMut, BytesMut};
+use bytes::{BufMut, BytesMut};
 use tokio::net::UdpSocket;
 
-use crate::dns_message::{parse_question, DnsHeader, ResultCode};
+use crate::{
+    dns_database::DnsDatabase,
+    dns_message::{parse_question, DnsHeader, DnsQuestion, ResultCode},
+};
 
-pub async fn handle_request(req: BytesMut, addr: SocketAddr, socket: &UdpSocket) {
-    match build_response(req) {
+pub async fn handle_request(req: BytesMut, addr: SocketAddr, socket: &UdpSocket, db: &DnsDatabase) {
+    match build_response(req, &db) {
         Ok(response) => {
             let _ = socket.send_to(&response, &addr).await;
         }
@@ -16,32 +22,43 @@ pub async fn handle_request(req: BytesMut, addr: SocketAddr, socket: &UdpSocket)
     }
 }
 
-fn build_response(req: BytesMut) -> Result<BytesMut, Box<dyn Error>> {
+fn build_response(req: BytesMut, db: &DnsDatabase) -> Result<BytesMut, Box<dyn Error>> {
     if req.len() < 12 {
         return Err("Buffer too small for DNS header".into());
     }
 
     let mut header = DnsHeader::parse(&req)?;
-    println!("Header: {:#?}", header);
-
     let question = parse_question(&req);
 
-    println!("Question: {:#?}", question);
-
-    // Create a new response buffer
-
-    let mut response = header.format(ResultCode::NOERROR, 1)?;
-
-    // Append the original question section (from the request)
-    response.extend_from_slice(&req[12..]); // Append the question part
-
-    // Construct the answer section
-    response.put_u16(0xc00c); // Pointer to the domain name in the question
-    response.put_u16(0x0001); // Type A (IPv4)
-    response.put_u16(0x0001); // Class IN
-    response.put_u32(16); // TTL (16 seconds)
-    response.put_u16(4); // Length of the IP address (4 bytes)
-    response.put_u32(0x7f000001); // 127.0.0.1 in hexadecimal
+    let answer = build_answer(question, db);
+    let mut response;
+    if answer.is_none() {
+        response = header.format(ResultCode::NXDOMAIN, 0)?;
+        response.extend_from_slice(&req[12..]);
+    } else {
+        response = header.format(ResultCode::NOERROR, 1)?;
+        response.extend_from_slice(&req[12..]);
+        response.put(answer.unwrap());
+    }
 
     Ok(response)
+}
+
+fn build_answer(question: DnsQuestion, db: &DnsDatabase) -> Option<BytesMut> {
+    let mut res = BytesMut::new();
+    let record = db.get_record(question.qname.as_str(), question.qtype);
+
+    if record.is_none() {
+        return None;
+    }
+
+    let record = record.unwrap();
+    res.put_u16(0xc00c);
+    let hex_ip: Ipv4Addr = record.value.parse().unwrap();
+    res.put_u16(1);
+    res.put_u16(1);
+    res.put_u32(record.ttl);
+    res.put_u16(4);
+    res.put_u32(hex_ip.to_bits());
+    Some(res)
 }
