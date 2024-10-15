@@ -37,15 +37,3 @@ To run the project in development mode, use:
 ```bash
 cargo watch -q -c -x 'run -q'
 ```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a pull request or open an issue.
-
-## License
-
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
-
-## Acknowledgements
-
-Thank you for your interest in JDNS! If you have any questions or feedback, please reach out.
