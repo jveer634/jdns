@@ -1,6 +1,6 @@
-JDNS
+# JDNS
 
-A rust based dns protocol implementation.
+A rust based dns protocol implementation. The project is running on port 5300. To change it, update [main.rs](/src/main.rs)
 
 To run it
 
