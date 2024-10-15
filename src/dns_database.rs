@@ -21,7 +21,7 @@ impl DnsDatabase {
     }
 
     pub fn get_record(&self, domain: &str, rtype: RecordType) -> Option<DnsRecord> {
-        println!("Search for {:?} {:?} {:#?}", domain, rtype, self.records);
+        // println!("Search for {:?} {:?} {:#?}", domain, rtype, self.records);
         self.records
             .get(domain)
             .and_then(|records: &Vec<DnsRecord>| {
@@ -39,7 +39,7 @@ impl DnsDatabase {
 
     pub fn add_dummy(&mut self) {
         self.add_record(
-            "example.com.",
+            "example.com",
             DnsRecord {
                 record_type: RecordType::A,
                 value: "192.0.2.1".to_string(),
@@ -47,7 +47,7 @@ impl DnsDatabase {
             },
         );
         self.add_record(
-            "example.com.",
+            "example.com",
             DnsRecord {
                 record_type: RecordType::A,
                 value: "192.0.2.2".to_string(),
@@ -57,7 +57,7 @@ impl DnsDatabase {
 
         // Adding AAAA records
         self.add_record(
-            "example.com.",
+            "example.com",
             DnsRecord {
                 record_type: RecordType::AAAA,
                 value: "2001:db8::1".to_string(),
@@ -65,7 +65,7 @@ impl DnsDatabase {
             },
         );
         self.add_record(
-            "example.com.",
+            "example.com",
             DnsRecord {
                 record_type: RecordType::AAAA,
                 value: "2001:db8::2".to_string(),
@@ -75,7 +75,7 @@ impl DnsDatabase {
 
         // Adding CNAME records
         self.add_record(
-            "www.example.com.",
+            "www.example.com",
             DnsRecord {
                 record_type: RecordType::CNAME,
                 value: "example.com".to_string(),
@@ -83,7 +83,7 @@ impl DnsDatabase {
             },
         );
         self.add_record(
-            "blog.example.com.",
+            "blog.example.com",
             DnsRecord {
                 record_type: RecordType::CNAME,
                 value: "example.com".to_string(),
@@ -93,7 +93,7 @@ impl DnsDatabase {
 
         // Adding MX records
         self.add_record(
-            "example.com.",
+            "example.com",
             DnsRecord {
                 record_type: RecordType::MX,
                 value: "mail.example.com".to_string(),
@@ -101,7 +101,7 @@ impl DnsDatabase {
             },
         );
         self.add_record(
-            "example.com.",
+            "example.com",
             DnsRecord {
                 record_type: RecordType::MX,
                 value: "altmail.example.com".to_string(),

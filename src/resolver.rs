@@ -1,7 +1,4 @@
-use std::{
-    error::Error,
-    net::{Ipv4Addr, Ipv6Addr, SocketAddr},
-};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr};
 
 use bytes::{BufMut, BytesMut};
 use tokio::net::UdpSocket;
@@ -12,41 +9,43 @@ use crate::{
 };
 
 pub async fn handle_request(req: BytesMut, addr: SocketAddr, socket: &UdpSocket, db: &DnsDatabase) {
-    match build_response(req, &db) {
-        Ok(response) => {
-            let _ = socket.send_to(&response, &addr).await;
-        }
-        Err(e) => {
-            eprintln!("Failed to build response: {}", e);
-        }
-    }
+    let response = build_response(req, &db);
+    let _ = socket.send_to(&response, &addr).await;
 }
 
-fn build_response(req: BytesMut, db: &DnsDatabase) -> Result<BytesMut, Box<dyn Error>> {
-    if req.len() < 12 {
-        return Err("Buffer too small for DNS header".into());
+fn build_response(req: BytesMut, db: &DnsDatabase) -> BytesMut {
+    let mut header = DnsHeader::parse(&req);
+    if header.result_code == ResultCode::FORMERR {
+        return header.format(ResultCode::FORMERR, 0);
     }
 
-    let mut header = DnsHeader::parse(&req)?;
-    let question = parse_question(&req);
+    let question = match parse_question(&req) {
+        Ok(x) => x,
+        Err(_) => {
+            return header.format(ResultCode::FORMERR, 0);
+        }
+    };
 
     let answer = build_answer(question, db);
+    // println!("Answer {:#?}", answer);
     let mut response;
     if answer.is_none() {
-        response = header.format(ResultCode::NXDOMAIN, 0)?;
+        response = header.format(ResultCode::NXDOMAIN, 0);
         response.extend_from_slice(&req[12..]);
     } else {
-        response = header.format(ResultCode::NOERROR, 1)?;
+        response = header.format(ResultCode::NOERROR, 1);
         response.extend_from_slice(&req[12..]);
         response.put(answer.unwrap());
     }
 
-    Ok(response)
+    response
 }
 
 fn build_answer(question: DnsQuestion, db: &DnsDatabase) -> Option<BytesMut> {
     let mut res = BytesMut::new();
-    let record = db.get_record(question.qname.as_str(), question.qtype);
+    let record = db.get_record(question.qname.trim_end_matches('.'), question.qtype);
+
+    // println!("Record {:?}", record);
 
     if record.is_none() {
         return None;

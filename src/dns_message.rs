@@ -1,8 +1,9 @@
 use bytes::{BufMut, BytesMut};
 use std::error::Error;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, Default, PartialEq, Eq)]
 pub enum ResultCode {
+    #[default]
     NOERROR = 0,
     FORMERR = 1,
     SERVFAIL = 2,
@@ -25,7 +26,7 @@ impl ResultCode {
 }
 
 // A simple representation of a DNS Header
-#[derive(Debug)]
+#[derive(Debug, Default)]
 pub struct DnsHeader {
     pub id: u16,
 
@@ -40,7 +41,7 @@ pub struct DnsHeader {
     authed_data: bool,
     z: bool,
 
-    result_code: ResultCode,
+    pub result_code: ResultCode,
 
     pub questions_count: u16,
     pub answers_count: u16,
@@ -62,16 +63,19 @@ pub enum RecordType {
 pub struct DnsQuestion {
     pub qname: String,
     pub qtype: RecordType,
-    qclass: u16,
+    _qclass: u16,
 }
 
 impl DnsHeader {
-    pub fn parse(buf: &BytesMut) -> Result<Self, Box<dyn Error>> {
+    pub fn parse(buf: &BytesMut) -> Self {
+        let id = (buf[0] as u16) << 8 | buf[1] as u16;
         if buf.len() < 12 {
-            return Err("Buffer too small for DNS header".into());
+            let mut header = DnsHeader::default();
+            header.response = true;
+            header.result_code = ResultCode::FORMERR;
+            return header;
         }
 
-        let id = (buf[0] as u16) << 8 | buf[1] as u16;
         let flags = (buf[2] as u16) << 8 | buf[3] as u16;
         let questions_count = (buf[4] as u16) << 8 | buf[5] as u16;
         let answers_count = (buf[6] as u16) << 8 | buf[7] as u16;
@@ -93,7 +97,7 @@ impl DnsHeader {
         let z = (b & (1 << 6)) > 0;
         let recursion_available = (b & (1 << 7)) > 0;
 
-        Ok(DnsHeader {
+        DnsHeader {
             id,
             response,
             truncated_message,
@@ -109,14 +113,10 @@ impl DnsHeader {
             answers_count,
             authority_count,
             additional_count,
-        })
+        }
     }
 
-    pub fn format(
-        &mut self,
-        status: ResultCode,
-        answers_count: u16,
-    ) -> Result<BytesMut, Box<dyn Error>> {
+    pub fn format(&mut self, status: ResultCode, answers_count: u16) -> BytesMut {
         self.response = true;
         self.result_code = status;
         self.answers_count = answers_count;
@@ -145,6 +145,12 @@ impl DnsHeader {
         if self.recursion_available {
             b |= 1 << 7;
         }
+        if self.checking_disabled {
+            b |= 1 << 1;
+        }
+        if self.authed_data {
+            b |= 1 << 2;
+        }
         b |= (if self.z { 1 } else { 0 }) << 4; // Treat 'z' as a boolean flag
         b |= self.result_code as u8 & 0x0F;
 
@@ -160,11 +166,11 @@ impl DnsHeader {
         response.put_u16(self.authority_count);
         response.put_u16(self.additional_count);
 
-        Ok(response)
+        response
     }
 }
 
-pub fn parse_question(buf: &[u8]) -> DnsQuestion {
+pub fn parse_question(buf: &[u8]) -> Result<DnsQuestion, Box<dyn Error>> {
     let mut pos = 12; // Skip the header (first 12 bytes)
     let mut qname = String::new();
 
@@ -187,15 +193,17 @@ pub fn parse_question(buf: &[u8]) -> DnsQuestion {
         15 => RecordType::MX,
         16 => RecordType::TXT,
         28 => RecordType::AAAA,
-        _ => todo!("Implement Error Handling"),
+        _ => {
+            return Err("Unsupported query type".into());
+        }
     };
 
     // for now class is hardcoded
     let qclass = u16::from_be_bytes([buf[pos + 2], buf[pos + 3]]);
 
-    DnsQuestion {
+    Ok(DnsQuestion {
         qname,
         qtype,
-        qclass,
-    }
+        _qclass: qclass,
+    })
 }
